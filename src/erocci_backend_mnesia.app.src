@@ -1,0 +1,13 @@
+%%-*- mode: erlang -*-
+{application, erocci_backend_mnesia,
+ [
+  {description, "erocci Mnesia backend"},
+  {modules, []},
+  {vsn, "git"},
+  {applications, 
+   [
+    kernel,
+    stdlib
+   ]},
+  {registered, []}
+ ]}.
