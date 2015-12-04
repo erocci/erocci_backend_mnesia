@@ -193,7 +193,7 @@ load_resource_node_t(#occi_node{data=#occi_resource{links=OrigLinks}=Res}=Node) 
 
 
 save_t(#occi_node{id=Id, type=occi_resource, data=Res}=Node) ->
-    ObjId = make_ref(),
+    ObjId = erlang:phash2(make_ref()),
     { Node2, LinksNodes } = 
         get_resource_links_t(Node#occi_node{objid=ObjId, data=occi_resource:set_id(Res, ObjId)}),
     save_entity_t(Id, Node2#occi_node.data),
@@ -201,7 +201,7 @@ save_t(#occi_node{id=Id, type=occi_resource, data=Res}=Node) ->
     save_node_t(Node2);
 
 save_t(#occi_node{id=Id, type=occi_link, data=Link}=Node) ->
-    ObjId = make_ref(),
+    ObjId = erlang:phash2(make_ref()),
     save_entity_t(Id, occi_link:set_id(Link, ObjId)),
     save_node_t(Node#occi_node{objid=ObjId});
 
