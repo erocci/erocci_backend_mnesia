@@ -759,7 +759,7 @@ init_backend(Opts) ->
     Schemas = lists:map(fun ({path, _Path}=S) -> 
                                 S;
                             ({priv_dir, Path}) -> 
-                                Fullpath = filename:join([code:priv_dir(occi_backend_mnesia), Path]),
+                                Fullpath = filename:join([code:priv_dir(erocci_backend_mnesia), Path]),
                                 {path, Fullpath}
                         end, 
                         proplists:get_value(schemas, Opts, []) 
