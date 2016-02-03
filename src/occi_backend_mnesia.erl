@@ -35,8 +35,9 @@
 %%% occi_backend callbacks
 %%%===================================================================
 init(#occi_backend{opts=Opts}) ->
-    application:load(occi_backend_mnesia),
-    init_schema(Opts).
+    {ok, _} = application:ensure_all_started(erocci_backend_mnesia),
+    ok = init_schema(is_fresh_startup()),
+    init_backend(Opts).	    
 
 
 terminate(#state{}) ->
@@ -693,28 +694,22 @@ parse_marker(Bin) ->
     end.
 
 
-init_schema(Opts) ->
-    application:load(mnesia),
-    Path = mnesia:system_info(directory),
-    case filelib:is_file(filename:join([Path, "schema.DAT"])) of
-        true ->
-            ?debug("mnesia schema already exists on this node", []),
-            init_db(Opts);
-        false ->
-            ?debug("Creating mnesia schema on ~s", [Path]),
-            case mnesia:create_schema([node()]) of
-                ok ->
-                    init_db(Opts);
-                {error, {_, {already_exists,_}}} ->
-                    init_db(Opts);
-                {error, Err} ->
-                    ?error("Error creating mnesia schema on node ~p: ~p", [node(), Err]),
-                    {error, Err}
-            end
+init_schema({exists, Tables}) ->
+    mnesia:wait_for_tables(Tables, 10000);
+
+init_schema(true) ->
+    mnesia:stop(),
+    ?debug("Creating mnesia schema on ~s", [application:get_env(mnesia, dir, "")]),
+    case mnesia:create_schema([node()]) of
+	ok ->
+	    mnesia:start(),
+	    init_db();
+	{error, Err} ->
+	    ?error("Error creating mnesia schema on node ~p: ~p", [node(), Err]),
+	    throw(Err)
     end.
 
-init_db(Opts) ->
-    application:start(mnesia, permanent),
+init_db() ->
     Tables = [{occi_collection, [{disc_copies, [node()]},
                                  {attributes, record_info(fields, occi_collection)}]},
               {occi_resource, [{disc_copies, [node()]},
@@ -733,12 +728,11 @@ init_db(Opts) ->
                            {attributes, record_info(fields, occi_user)}]}],
     case init_tables(Tables) of
         ok ->
-            mnesia:wait_for_tables([occi_collection, occi_resource, occi_link,
-                                    occi_mixin, occi_node, occi_user], 5000),
-            init_backend(Opts);
+	    mnesia:wait_for_tables([occi_collection, occi_resource, occi_link,
+				    occi_mixin, occi_node, occi_user], 10000);
         {error, Err} ->
             ?error("Error creating mnesia tables: ~p", [Err]),
-            {error, Err}
+	    throw(Err)
     end.
 
 init_tables([]) ->
@@ -773,4 +767,15 @@ init_backend(Opts) ->
             {ok, [{schemas, lists:flatten([Schemas, Mixins])}], #state{}};
         {aborted, Reason} ->
             {error, Reason}
+    end.
+
+is_fresh_startup() ->
+    case mnesia:system_info(tables) of
+        [schema] -> true;
+        Tbls ->
+	    Node = node(),
+            case mnesia:table_info(schema, cookie) of
+                {_, Node} -> {exists, Tbls};
+                _ -> true
+            end
     end.
