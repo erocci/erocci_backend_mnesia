@@ -1,14 +1,18 @@
 %%-*- mode: erlang -*-
 {application, erocci_backend_mnesia,
  [
+  {id, "git"},
+  {vsn, "1.0.0"},
   {description, "erocci Mnesia backend"},
   {modules, []},
-  {vsn, "git"},
   {applications, 
    [
     kernel,
     stdlib,
     mnesia
    ]},
-  {registered, []}
+  {registered, []},
+  {env, [
+	 {schema, {extension, "http://schemas.ogf.org/occi/core#"}}
+	]}
  ]}.
