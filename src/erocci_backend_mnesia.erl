@@ -100,8 +100,10 @@ update(Actual, Attributes, S) ->
     Update = fun () ->
 		     Id = occi_entity:id(Actual),
 		     [Node] = mnesia:wread({?REC, Id}),
-		     mnesia:write(Node#?REC{ entity=occi_entity:update(Attributes, client, Actual),
-					     serial=incr(Node#?REC.serial) })
+		     Entity = occi_entity:update(Attributes, client, Actual),
+		     ok = mnesia:write(Node#?REC{ entity=Entity,
+						  serial=incr(Node#?REC.serial) }),
+		     {ok, Entity}
 	     end,
     transaction(Update, S).
 
@@ -120,24 +122,27 @@ delete(Id, S) ->
     transaction(Delete, S).
 
 
-mixin(Mixin, Entity, S) ->
-    ?info("[~s] mixin(~s)", [?MODULE, occi_entity:id(Entity)]),
+mixin(Mixin, Actual, S) ->
+    ?info("[~s] mixin(~s)", [?MODULE, occi_entity:id(Actual)]),
     Mixin = fun () ->
-		    Id = occi_entity:id(Entity),
+		    Id = occi_entity:id(Actual),
 		    [Node] = mnesia:wread({?REC, Id}),
-		    mnesia:write(Node#?REC{ entity=occi_entity:add_mixin(Mixin, Entity),
-					    serial=incr(Node#?REC.serial) }),
-		    mnesia:write({?COLLECTION, occi_mixin:id(Mixin), Id, occi_mixin:tag(Mixin)})
+		    Entity = occi_entity:add_mixin(Mixin, Actual),
+		    ok = mnesia:write(Node#?REC{ entity=Entity,
+						 serial=incr(Node#?REC.serial) }),
+		    ok = mnesia:write({?COLLECTION, occi_mixin:id(Mixin), Id, occi_mixin:tag(Mixin)}),
+		    {ok, Entity}
 	    end,
     transaction(Mixin, S).
 
 
-unmixin(Mixin, Entity, S) ->
-    ?info("[~s] unmixin(~s)", [?MODULE, occi_entity:id(Entity)]),
+unmixin(Mixin, Actual, S) ->
+    ?info("[~s] unmixin(~s)", [?MODULE, occi_entity:id(Actual)]),
     Unmixin = fun () ->
-		      Id = occi_entity:id(Entity),
+		      Id = occi_entity:id(Actual),
 		      [Node] = mnesia:wread({?REC, Id}),
-		      mnesia:write(Node#?REC{ entity=occi_entity:rm_mixin(Mixin, Entity),
+		      Entity = occi_entity:rm_mixin(Mixin, Actual),
+		      mnesia:write(Node#?REC{ entity=Entity,
 					      serial=incr(Node#?REC.serial) }),
 		      mnesia:delete_object(#?COLLECTION{ category=occi_mixin:id(Mixin), id=Id, _='_' })
 	    end,
@@ -157,7 +162,7 @@ collection(Id, _Filter, Start, Number, S) ->
 					Node#?REC.id =:= Coll#?COLLECTION.id ]),
 			 QC = qlc:cursor(QH),
 			 _Trash = qlc:next_answers(QC, Start-1),
-			 qlc:next_answers(QC, Number)
+			 {ok, qlc:next_answers(QC, Number), undefined}
 		 end,
     transaction(Collection, S).
 
