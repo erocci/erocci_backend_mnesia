@@ -50,7 +50,7 @@
 init(Opts) ->
     {ok, _} = application:ensure_all_started(erocci_backend_mnesia),
     ok = init_schema(is_fresh_startup()),
-    init_model(application:get_env(erocci_backend_mnesia, schema, []), Opts).
+    init_model(proplists:get_value(schema, Opts, []), Opts).
 
 
 terminate(_S) ->
@@ -231,9 +231,11 @@ init_model([], _Opts) ->
     {error, no_schema};
 
 init_model(Path, Opts) when is_list(Path); is_binary(Path) ->
+    ?debug("Load OCCI schema from: ~s", [Path]),
     init_user_mixins(occi_rendering:parse(Path, occi_extension), Opts);
 
 init_model({extension, Scheme}, Opts) ->
+    ?debug("Load OCCI extension: ~s", [Scheme]),
     Uuid = uuid:uuid_to_string(uuid:get_v4(), binary_standard),
     BackendScheme = << ?BASE_SCHEME/binary, Uuid/binary >>,
     Ext = occi_extension:add_import(Scheme, occi_extension:new(BackendScheme)),
