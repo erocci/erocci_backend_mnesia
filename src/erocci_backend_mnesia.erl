@@ -230,9 +230,14 @@ init_tables([{Name, TabDef} | Tables]) ->
 init_model([], _Opts) ->
     {error, no_schema};
 
+init_model({priv_dir, Path}, Opts) when is_list(Path); is_binary(Path) ->
+    ?debug("Load OCCI schema from priv dir: ~s", [Path]),
+    Fullpath = filename:join([code:priv_dir(erocci_backend_mnesia), Path]),
+    init_user_mixins(occi_rendering:parse_file(Fullpath, occi_extension), Opts);
+
 init_model(Path, Opts) when is_list(Path); is_binary(Path) ->
     ?debug("Load OCCI schema from: ~s", [Path]),
-    init_user_mixins(occi_rendering:parse(Path, occi_extension), Opts);
+    init_user_mixins(occi_rendering:parse_file(Path, occi_extension), Opts);
 
 init_model({extension, Scheme}, Opts) ->
     ?debug("Load OCCI extension: ~s", [Scheme]),
