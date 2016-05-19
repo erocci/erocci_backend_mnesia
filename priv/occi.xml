@@ -2,7 +2,9 @@
 <occi:extension xmlns:occi="http://schemas.ogf.org/occi"
 		xmlns:xs="http://www.w3.org/2001/XMLSchema"
 		xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-		xsi:schemaLocation="http://example.org/occi occi.xsd " name="A REST blog"
+		xsi:schemaLocation="http://example.org/occi occi.xsd "
+		name="A REST blog"
+		scheme="http://example.org/occi/test#"
 		status="experimental" version="1">
   
   <occi:kind scheme="http://example.org/occi/test#" term="blog" title="A Blog">
