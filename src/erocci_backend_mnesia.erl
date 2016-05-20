@@ -77,22 +77,25 @@ get(Id, S) ->
 
 create(Id, Entity, Owner, Group, S) ->
     ?info("[~s] create(~s)", [?MODULE, Id]),
-    Node = case mnesia:read(?REC, Id) of
-	       [] ->
-		   {?REC, Id, Entity, Owner, Group, integer_to_binary(1)};
-	       [{?REC, _, _, Owner, _, Serial}] ->
-		   {?REC, Id, Entity, Owner, Group, incr(Serial)};
-	       [{?REC, _, _, _OtherOwner, _, _}] ->
-		   throw(conflict)
+    Fun =  fun () ->
+		   Node = case mnesia:read(?REC, Id) of
+			      [] ->
+				  {?REC, Id, Entity, Owner, Group, integer_to_binary(1)};
+			      [{?REC, _, _, Owner, _, Serial}] ->
+				  {?REC, Id, Entity, Owner, Group, incr(Serial)};
+			      [{?REC, _, _, _OtherOwner, _, _}] ->
+				  throw(conflict)
+			  end,
+		   gen_create(Node)
 	   end,
-    transaction(gen_create(Node), S).
+    transaction(Fun, S).
     
 
 create(Entity, Owner, Group, S) ->
     ?info("[~s] create(~s)", [?MODULE, occi_entity:location(Entity)]),
     Id = uuid:uuid_to_string(uuid:get_v4(), binary_standard),
     Node = {?REC, Id, occi_entity:id(Id, Entity), Owner, Group, integer_to_binary(1)},
-    transaction(gen_create(Node), S).
+    transaction(fun () -> gen_create(Node) end, S).
 
 
 update(Actual, Attributes, S) ->
@@ -170,15 +173,13 @@ collection(Id, _Filter, Start, Number, S) ->
 %%% Internal functions
 %%%===================================================================
 gen_create(Node) ->
-    fun () ->
-	    ok = mnesia:write(Node),
-	    ok = mnesia:write({?COLLECTION, occi_entity:kind(#?REC.entity), Node#?REC.id, false}),
-	    lists:foreach(fun (MixinId) ->
-				  Mixin = occi_models:category(MixinId),
-				  Tag = occi_mixin:tag(Mixin),
-				  mnesia:write({?COLLECTION, MixinId, Node#?REC.id, Tag})
-			  end, occi_entity:mixins(#?REC.entity))
-    end.
+    ok = mnesia:write(Node),
+    ok = mnesia:write({?COLLECTION, occi_entity:kind(#?REC.entity), Node#?REC.id, false}),
+    lists:foreach(fun (MixinId) ->
+			  Mixin = occi_models:category(MixinId),
+			  Tag = occi_mixin:tag(Mixin),
+			  mnesia:write({?COLLECTION, MixinId, Node#?REC.id, Tag})
+		  end, occi_entity:mixins(#?REC.entity)).
 
 
 init_schema({exists, Tables}) ->
