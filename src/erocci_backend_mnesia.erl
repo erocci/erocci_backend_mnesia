@@ -155,16 +155,18 @@ unmixin(Mixin, Actual, S) ->
 %% @todo memorize cursors ?, implements filters
 %% @end
 collection(Id, _Filter, Start, Number, S) ->
-    ?info("[~s] collection(~s, ~b, ~b)", [?MODULE, Id, Start, Number]),
+    ?info("[~s] collection(~p, ~b, ~p)", [?MODULE, Id, Start, Number]),
     Collection = fun () ->
-			 
 			 QH = qlc:q([ { Node#?REC.entity, Node#?REC.owner, Node#?REC.group } ||
 					Node <- mnesia:table(?REC),
 					Coll <- mnesia:table(?COLLECTION),
 					Coll#?COLLECTION.category =:= Id,
 					Node#?REC.id =:= Coll#?COLLECTION.id ]),
 			 QC = qlc:cursor(QH),
-			 _Trash = qlc:next_answers(QC, Start-1),
+			 case Start of
+			     0 -> ok;
+			     _ -> _Trash = qlc:next_answers(QC, Start-1)
+			 end,
 			 {ok, qlc:next_answers(QC, Number), undefined}
 		 end,
     transaction(Collection, S).
