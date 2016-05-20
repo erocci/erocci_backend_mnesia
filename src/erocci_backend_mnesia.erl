@@ -41,6 +41,11 @@
 -record(?REC, {id, entity, owner, group, serial}).
 -record(?COLLECTION, {category, id, usermixin}).
 
+-define(TABLES, [{?REC, [{disc_copies, [node()]},
+			 {attributes, record_info(fields, ?REC)}]},
+		 {?COLLECTION, [{disc_copies, [node()]},
+				{attributes, record_info(fields, ?COLLECTION)}]}]).
+
 -type state() :: occi_extension:t().
 
 %%%===================================================================
@@ -49,8 +54,17 @@
 -spec init([]) -> {ok, erocci_backend:capability(), state()} | {error, term()}.
 init(Opts) ->
     {ok, _} = application:ensure_all_started(erocci_backend_mnesia),
-    ok = init_schema(is_fresh_startup()),
-    init_model(proplists:get_value(schema, Opts, []), Opts).
+    case init_schema(missing_tables(?TABLES)) of
+	ok ->
+	    init_model(proplists:get_value(schema, Opts, []), Opts);
+	{error, schema} ->
+	    ?error("###~n"
+		   "### You must first create Mnesia database files with:~n"
+		   "### ~s/schema.es~n"
+		   "###~n", [code:priv_dir(erocci_backend_mnesia)]),
+	    timer:sleep(1000),
+	    erlang:halt(1)
+    end.
 
 
 terminate(_S) ->
@@ -171,12 +185,13 @@ collection(Id, _Filter, Start, Number, S) ->
 		 end,
     transaction(Collection, S).
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 gen_create(Node) ->
     ok = mnesia:write(Node),
-    ok = mnesia:write({?COLLECTION, occi_entity:kind(#?REC.entity), Node#?REC.id, false}),
+    ok = mnesia:write({?COLLECTION, occi_entity:kind(Node#?REC.entity), Node#?REC.id, false}),
     lists:foreach(fun (MixinId) ->
 			  Mixin = occi_models:category(MixinId),
 			  Tag = occi_mixin:tag(Mixin),
@@ -184,34 +199,14 @@ gen_create(Node) ->
 		  end, occi_entity:mixins(#?REC.entity)).
 
 
-init_schema({exists, Tables}) ->
-    mnesia:wait_for_tables(Tables, 10000);
+init_schema(no_schema) ->
+    {error, schema};
 
+init_schema([]) ->
+    init_mnesia:wait_for_tables([?REC, ?COLLECTION], 10000);
 
-init_schema(true) ->
-    mnesia:stop(),
-    ?debug("Creating mnesia schema on ~s", [application:get_env(mnesia, dir, "")]),
-    case mnesia:create_schema([node()]) of
-	ok ->
-	    mnesia:start(),
-	    init_db();
-	{error, Err} ->
-	    ?error("Error creating mnesia schema on node ~p: ~p", [node(), Err]),
-	    throw(Err)
-    end.
-
-init_db() ->
-    Tables = [{?REC, [{disc_copies, [node()]},
-		      {attributes, record_info(fields, ?REC)}]},
-              {?COLLECTION, [{disc_copies, [node()]},
-			     {attributes, record_info(fields, ?COLLECTION)}]}],
-    case init_tables(Tables) of
-        ok ->
-	    mnesia:wait_for_tables([?REC, ?COLLECTION], 10000);
-        {error, Err} ->
-            ?error("Error creating mnesia tables: ~p", [Err]),
-	    throw(Err)
-    end.
+init_schema(Missing) ->
+    init_tables(Missing).
 
 
 init_tables([]) ->
@@ -221,6 +216,7 @@ init_tables([{Name, TabDef} | Tables]) ->
     case mnesia:create_table(Name, TabDef) of
         {atomic, ok} ->
             ?debug("mnesia: created table: ~p~n", [Name]),
+	    mnesia:wait_for_tables(Name, 10000),
             init_tables(Tables);
         {aborted, {already_exists, Name}} ->
             ?debug("mnesia: table ~p already exists~n", [Name]),
@@ -255,16 +251,25 @@ init_user_mixins(Ext, _Opts) ->
     {ok, [], Ext}.
 
 
-is_fresh_startup() ->
-    case mnesia:system_info(tables) of
-        [schema] -> true;
-        Tbls ->
-	    Node = node(),
-            case mnesia:table_info(schema, cookie) of
-                {_, Node} -> {exists, Tbls};
-                _ -> true
-            end
+missing_tables(Tables) ->
+    case mnesia:table_info(schema, disc_copies) of
+	[] -> 
+	    no_schema;
+	_Nodes ->
+	    missing_tables(Tables, [])
     end.
+
+
+missing_tables([], Acc) ->
+    Acc;
+
+missing_tables([ {Id, _}=Def | Tables ], Acc) ->
+    try mnesia:table_info(Id, disc_copies) of
+	[] -> missing_tables(Tables, [ Def | Acc ]);
+	_Nodes -> missing_tables(Tables, Acc)
+    catch exit:{aborted, {no_exists, _, _}} ->
+	    missing_tables(Tables, [ Def | Acc ])
+    end.	    
 
 
 incr(Serial) when is_binary(Serial) ->
