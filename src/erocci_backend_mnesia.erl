@@ -40,8 +40,8 @@
 -define(REC, ?MODULE).
 -define(COLLECTION, erocci_backend_mnesia_collection).
 
--record(?REC, {id, entity, owner, group, serial}).
--record(?COLLECTION, {category, id, usermixin}).
+-record(?REC, {location, entity, owner, group, serial}).
+-record(?COLLECTION, {category, location, usermixin}).
 
 -define(TABLES, [{?REC, [{disc_copies, [node()]},
 			 {attributes, record_info(fields, ?REC)}]},
@@ -86,10 +86,10 @@ model(S) ->
     {{ok, S}, S}.
 
 
-get(Id, S) ->
-    ?info("[~s] get(~s)", [?MODULE, Id]),
+get(Location, S) ->
+    ?info("[~s] get(~s)", [?MODULE, Location]),
     Get = fun () ->
-		  case mnesia:read(?REC, Id) of
+		  case mnesia:read(?REC, Location) of
 		      [] -> 
 			  {error, not_found};
 		      [{?REC, _, Entity, Owner, Group, Serial}] ->
@@ -99,34 +99,45 @@ get(Id, S) ->
     transaction(Get, S).
 
 
-create(Id, Entity, Owner, Group, S) ->
-    ?info("[~s] create(~s)", [?MODULE, Id]),
+create(Location, Entity, Owner, Group, S) ->
+    ?info("[~s] create(~s)", [?MODULE, Location]),
     Fun =  fun () ->
-		   Node = case mnesia:read(?REC, Id) of
+		   Node = case mnesia:read(?REC, Location) of
 			      [] ->
-				  {?REC, Id, Entity, Owner, Group, integer_to_binary(1)};
+				  {?REC, Location, Entity, Owner, Group, integer_to_binary(1)};
 			      [{?REC, _, _, Owner, _, Serial}] ->
-				  {?REC, Id, Entity, Owner, Group, incr(Serial)};
+				  {?REC, Location, Entity, Owner, Group, incr(Serial)};
 			      [{?REC, _, _, _OtherOwner, _, _}] ->
 				  {error, conflict}
 			  end,
-		   gen_create(Node)
+		   case gen_create(Node) of
+		       {error, _}=Err ->
+			   Err;
+		       ok ->
+			   {ok, Node#?REC.entity}
+		   end
 	   end,
     transaction(Fun, S).
     
 
 create(Entity, Owner, Group, S) ->
-    ?info("[~s] create(~s)", [?MODULE, occi_entity:location(Entity)]),
     Id = uuid:uuid_to_string(uuid:get_v4(), binary_standard),
-    Node = {?REC, Id, occi_entity:id(Id, Entity), Owner, Group, integer_to_binary(1)},
-    transaction(fun () -> gen_create(Node) end, S).
+    KindLocation = occi_kind:location(occi_models:kind(occi_entity:kind(Entity))),
+    Location = filename:join(KindLocation, Id),
+    Entity1 = occi_entity:id(Id, occi_entity:location(Location, Entity)),
+    ?info("[~s] create(~s)", [?MODULE, Location]),
+    Node = {?REC, Location, Entity1, Owner, Group, integer_to_binary(1)},
+    transaction(fun () -> 
+			ok = gen_create(Node),
+			{ok, Location, Node#?REC.entity}
+		end, S).
 
 
 update(Actual, Attributes, S) ->
-    ?info("[~s] update(~s)", [?MODULE, occi_entity:id(Actual)]),
+    ?info("[~s] update(~s)", [?MODULE, occi_entity:location(Actual)]),
     Update = fun () ->
-		     Id = occi_entity:id(Actual),
-		     [Node] = mnesia:wread({?REC, Id}),
+		     Location = occi_entity:location(Actual),
+		     [Node] = mnesia:wread({?REC, Location}),
 		     Entity = occi_entity:update(Attributes, client, Actual),
 		     ok = mnesia:write(Node#?REC{ entity=Entity,
 						  serial=incr(Node#?REC.serial) }),
@@ -136,42 +147,42 @@ update(Actual, Attributes, S) ->
 
 
 action(_Invoke, Entity, S) ->
-    ?info("[~s] invoke(~s)", [?MODULE, occi_entity:id(Entity)]),
+    ?info("[~s] invoke(~s)", [?MODULE, occi_entity:location(Entity)]),
     %% Storage only, not supported
     {{ok, Entity}, S}.
 
 
-delete(Id, S) ->
-    ?info("[~s] delete(~s)", [?MODULE, Id]),
+delete(Location, S) ->
+    ?info("[~s] delete(~s)", [?MODULE, Location]),
     Delete = fun () ->
-		     mnesia:delete({?REC, Id})
+		     mnesia:delete({?REC, Location})
 	     end,
     transaction(Delete, S).
 
 
 mixin(Mixin, Actual, S) ->
-    ?info("[~s] mixin(~s)", [?MODULE, occi_entity:id(Actual)]),
+    ?info("[~s] mixin(~s)", [?MODULE, occi_entity:location(Actual)]),
     Mixin = fun () ->
-		    Id = occi_entity:id(Actual),
-		    [Node] = mnesia:wread({?REC, Id}),
+		    Location = occi_entity:location(Actual),
+		    [Node] = mnesia:wread({?REC, Location}),
 		    Entity = occi_entity:add_mixin(Mixin, Actual),
 		    ok = mnesia:write(Node#?REC{ entity=Entity,
 						 serial=incr(Node#?REC.serial) }),
-		    ok = mnesia:write({?COLLECTION, occi_mixin:id(Mixin), Id, occi_mixin:tag(Mixin)}),
+		    ok = mnesia:write({?COLLECTION, occi_mixin:id(Mixin), Location, occi_mixin:tag(Mixin)}),
 		    {ok, Entity}
 	    end,
     transaction(Mixin, S).
 
 
 unmixin(Mixin, Actual, S) ->
-    ?info("[~s] unmixin(~s)", [?MODULE, occi_entity:id(Actual)]),
+    ?info("[~s] unmixin(~s)", [?MODULE, occi_entity:location(Actual)]),
     Unmixin = fun () ->
-		      Id = occi_entity:id(Actual),
-		      [Node] = mnesia:wread({?REC, Id}),
+		      Location = occi_entity:location(Actual),
+		      [Node] = mnesia:wread({?REC, Location}),
 		      Entity = occi_entity:rm_mixin(Mixin, Actual),
 		      mnesia:write(Node#?REC{ entity=Entity,
 					      serial=incr(Node#?REC.serial) }),
-		      mnesia:delete_object(#?COLLECTION{ category=occi_mixin:id(Mixin), id=Id, _='_' })
+		      mnesia:delete_object(#?COLLECTION{ category=occi_mixin:id(Mixin), location=Location, _='_' })
 	    end,
     transaction(Unmixin, S).
 
@@ -188,7 +199,7 @@ collection(Id, _Filter, Start, Number, S) ->
 					Node <- mnesia:table(?REC),
 					Coll <- mnesia:table(?COLLECTION),
 					Coll#?COLLECTION.category =:= Id,
-					Node#?REC.id =:= Coll#?COLLECTION.id ]),
+					Node#?REC.location =:= Coll#?COLLECTION.location ]),
 			 QC = qlc:cursor(QH),
 			 case Start of
 			     0 -> ok;
@@ -207,13 +218,13 @@ gen_create({error, _}=Err) ->
 
 gen_create(Node) ->
     ok = mnesia:write(Node),
-    ok = mnesia:write({?COLLECTION, occi_entity:kind(Node#?REC.entity), Node#?REC.id, false}),
+    ok = mnesia:write({?COLLECTION, occi_entity:kind(Node#?REC.entity), Node#?REC.location, false}),
     ok = lists:foreach(fun (MixinId) ->
 			       Mixin = occi_models:category(MixinId),
 			       Tag = occi_mixin:tag(Mixin),
-			       mnesia:write({?COLLECTION, MixinId, Node#?REC.id, Tag})
+			       mnesia:write({?COLLECTION, MixinId, Node#?REC.location, Tag})
 		       end, occi_entity:mixins(Node#?REC.entity)),
-    {ok, Node#?REC.entity}.
+    ok.
 
 
 init_schema(no_schema) ->
