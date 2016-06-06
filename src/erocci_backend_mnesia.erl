@@ -46,7 +46,8 @@
 -define(TABLES, [{?REC, [{disc_copies, [node()]},
 			 {attributes, record_info(fields, ?REC)}]},
 		 {?COLLECTION, [{disc_copies, [node()]},
-				{attributes, record_info(fields, ?COLLECTION)}]}]).
+				{attributes, record_info(fields, ?COLLECTION)},
+				{type, bag}]}]).
 
 -type state() :: occi_extension:t().
 
