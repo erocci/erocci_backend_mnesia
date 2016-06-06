@@ -33,6 +33,8 @@
 	 unmixin/3,
 	 collection/5]).
 
+-export([mnesia_disc_copies/1]).
+
 -define(BASE_SCHEME, <<"http://schemas.erocci.ow2.org/">>).
 
 -define(REC, ?MODULE).
@@ -47,6 +49,13 @@
 				{attributes, record_info(fields, ?COLLECTION)}]}]).
 
 -type state() :: occi_extension:t().
+
+%%% @doc Returns nodes on which a mnesia schema must be created
+%%% @todo Generalize to all components ?
+%%% @end
+mnesia_disc_copies(_) ->
+    [node()].
+
 
 %%%===================================================================
 %%% occi_backend callbacks
@@ -203,7 +212,7 @@ init_schema(no_schema) ->
     {error, schema};
 
 init_schema([]) ->
-    init_mnesia:wait_for_tables([?REC, ?COLLECTION], 10000);
+    mnesia:wait_for_tables([?REC, ?COLLECTION], 10000);
 
 init_schema(Missing) ->
     init_tables(Missing).
