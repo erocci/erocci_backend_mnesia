@@ -90,7 +90,7 @@ get(Id, S) ->
     Get = fun () ->
 		  case mnesia:read(?REC, Id) of
 		      [] -> 
-			  throw(not_found);
+			  {error, not_found};
 		      [{?REC, _, Entity, Owner, Group, Serial}] ->
 			  {ok, Entity, Owner, Group, Serial}
 		  end
@@ -107,7 +107,7 @@ create(Id, Entity, Owner, Group, S) ->
 			      [{?REC, _, _, Owner, _, Serial}] ->
 				  {?REC, Id, Entity, Owner, Group, incr(Serial)};
 			      [{?REC, _, _, _OtherOwner, _, _}] ->
-				  throw(conflict)
+				  {error, conflict}
 			  end,
 		   gen_create(Node)
 	   end,
@@ -177,6 +177,9 @@ unmixin(Mixin, Actual, S) ->
 
 %% @todo memorize cursors ?, implements filters
 %% @end
+collection(Id, _Filter, Start, undefined, S) ->
+    collection(Id, _Filter, Start, all_remaining, S);
+
 collection(Id, _Filter, Start, Number, S) ->
     ?info("[~s] collection(~p, ~b, ~p)", [?MODULE, Id, Start, Number]),
     Collection = fun () ->
