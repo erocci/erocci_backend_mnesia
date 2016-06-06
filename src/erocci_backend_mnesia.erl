@@ -118,12 +118,11 @@ create(Location, Entity, Owner, Group, S) ->
 		   end
 	   end,
     transaction(Fun, S).
-    
+
 
 create(Entity, Owner, Group, S) ->
     Id = uuid:uuid_to_string(uuid:get_v4(), binary_standard),
-    KindLocation = occi_kind:location(occi_models:kind(occi_entity:kind(Entity))),
-    Location = filename:join(KindLocation, Id),
+    Location = Id,
     Entity1 = occi_entity:id(Id, occi_entity:location(Location, Entity)),
     ?info("[~s] create(~s)", [?MODULE, Location]),
     Node = {?REC, Location, Entity1, Owner, Group, integer_to_binary(1)},
