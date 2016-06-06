@@ -201,14 +201,18 @@ collection(Id, _Filter, Start, Number, S) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+gen_create({error, _}=Err) ->
+    Err;
+
 gen_create(Node) ->
     ok = mnesia:write(Node),
     ok = mnesia:write({?COLLECTION, occi_entity:kind(Node#?REC.entity), Node#?REC.id, false}),
-    lists:foreach(fun (MixinId) ->
-			  Mixin = occi_models:category(MixinId),
-			  Tag = occi_mixin:tag(Mixin),
-			  mnesia:write({?COLLECTION, MixinId, Node#?REC.id, Tag})
-		  end, occi_entity:mixins(#?REC.entity)).
+    ok = lists:foreach(fun (MixinId) ->
+			       Mixin = occi_models:category(MixinId),
+			       Tag = occi_mixin:tag(Mixin),
+			       mnesia:write({?COLLECTION, MixinId, Node#?REC.id, Tag})
+		       end, occi_entity:mixins(Node#?REC.entity)),
+    {ok, Node#?REC.entity}.
 
 
 init_schema(no_schema) ->
@@ -289,9 +293,9 @@ incr(Serial) when is_binary(Serial) ->
 
 
 transaction(Fun, S) ->
-    case mnesia:transaction(Fun) of
-	{atomic, Ok} ->
-	    {Ok, S};
-	{aborted, Error} ->
-	    {{error, Error}, S}
+    try mnesia:activity(transaction, Fun) of
+	Res ->
+	    {Res, S}
+    catch exit:Reason ->
+	    {{error, Reason}, S}
     end.
