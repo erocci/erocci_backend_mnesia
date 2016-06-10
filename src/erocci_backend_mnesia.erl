@@ -27,6 +27,7 @@
 	 create/4,
 	 create/5,
 	 update/3,
+	 link/4,
 	 action/3,
 	 delete/2,
 	 mixin/3,
@@ -39,15 +40,20 @@
 
 -define(REC, ?MODULE).
 -define(COLLECTION, erocci_backend_mnesia_collection).
+-define(LINKS, erocci_backend_mnesia_links).
 
 -record(?REC, {location, entity, owner, group, serial}).
 -record(?COLLECTION, {category, location, usermixin}).
+-record(?LINKS, {link, type, endpoint}).
 
 -define(TABLES, [{?REC, [{disc_copies, [node()]},
 			 {attributes, record_info(fields, ?REC)}]},
 		 {?COLLECTION, [{disc_copies, [node()]},
 				{attributes, record_info(fields, ?COLLECTION)},
-				{type, bag}]}]).
+				{type, bag}]},
+		 {?LINKS, [{disc_copies, [node()]},
+			   {attributes, record_info(fields, ?LINKS)},
+			   {type, bag}]}]).
 
 -type state() :: occi_extension:t().
 
@@ -93,7 +99,12 @@ get(Location, S) ->
 		      [] -> 
 			  {error, not_found};
 		      [{?REC, _, Entity, Owner, Group, Serial}] ->
-			  {ok, Entity, Owner, Group, Serial}
+			  case occi_type:type(Entity) of
+			      resource ->
+				  get_links(Entity, Owner, Group, Serial);
+			      _ ->
+				  {ok, Entity, Owner, Group, Serial}
+			  end
 		  end
 	  end,
     transaction(Get, S).
@@ -121,7 +132,11 @@ create(Location, Entity, Owner, Group, S) ->
 
 
 create(Entity, Owner, Group, S) ->
-    Id = uuid:uuid_to_string(uuid:get_v4(), binary_standard),
+    Id = case occi_entity:get(<<"occi.core.id">>, Entity) of
+	     undefined ->
+		 uuid:uuid_to_string(uuid:get_v4(), binary_standard);
+	     V -> V
+	 end,
     Location = Id,
     Entity1 = occi_entity:id(Id, occi_entity:location(Location, Entity)),
     ?info("[~s] create(~s)", [?MODULE, Location]),
@@ -143,6 +158,16 @@ update(Actual, Attributes, S) ->
 		     {ok, Entity}
 	     end,
     transaction(Update, S).
+
+
+link(Resource, Type, LinkId, S) ->
+    ?info("[~s] link(~s, ~s, ~s)", [?MODULE, occi_resource:location(Resource), Type, LinkId]),
+    Link = fun () ->
+		   Rec = #?LINKS{ link=LinkId, type=Type, endpoint=occi_resource:location(Resource) },
+		   ok = mnesia:write(Rec),
+		   {ok, Resource}
+	     end,
+    transaction(Link, S).
 
 
 action(_Invoke, Entity, S) ->
@@ -212,6 +237,14 @@ collection(Id, _Filter, Start, Number, S) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+get_links(Resource, Owner, Group, Serial) ->
+    Match = #?LINKS{ endpoint=occi_resource:location(Resource), _='_' },
+    Links = lists:map(fun (#?LINKS{ link=Location }) ->
+			      Location
+		      end, mnesia:match_object(Match)),
+    {ok, occi_resource:links(Links, Resource), Owner, Group, Serial}.    
+
+
 gen_create({error, _}=Err) ->
     Err;
 
