@@ -132,15 +132,16 @@ create(Location, Entity, Owner, Group, S) ->
 
 
 create(Entity, Owner, Group, S) ->
-    Id = case occi_entity:get(<<"occi.core.id">>, Entity) of
-	     undefined ->
-		 uuid:uuid_to_string(uuid:get_v4(), binary_standard);
-	     V -> V
-	 end,
-    Location = Id,
-    Entity1 = occi_entity:id(Id, occi_entity:location(Location, Entity)),
+    Entity1 = case occi_entity:get(<<"occi.core.id">>, Entity) of
+		  undefined ->
+		      occi_entity:id(uuid:uuid_to_string(uuid:get_v4(), binary_standard), Entity);
+		  V -> 
+		      oci_entity:id(V, Entity)
+	      end,
+    Location = occi_entity:id(Entity1),
+    Entity2 = occi_entity:location(Location, Entity1),
     ?info("[~s] create(~s)", [?MODULE, Location]),
-    Node = {?REC, Location, Entity1, Owner, Group, integer_to_binary(1)},
+    Node = {?REC, Location, Entity2, Owner, Group, integer_to_binary(1)},
     transaction(fun () -> 
 			ok = gen_create(Node),
 			{ok, Location, Node#?REC.entity}
