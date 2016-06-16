@@ -22,7 +22,7 @@
 -export([init/1,
          terminate/1]).
 
--export([model/1,
+-export([models/1,
 	 get/2,
 	 create/4,
 	 create/5,
@@ -55,7 +55,7 @@
 			   {attributes, record_info(fields, ?LINKS)},
 			   {type, bag}]}]).
 
--type state() :: occi_extension:t().
+-type state() :: [occi_extension:t()].
 
 %%% @doc Returns nodes on which a mnesia schema must be created
 %%% @todo Generalize to all components ?
@@ -88,7 +88,7 @@ terminate(_S) ->
     ok.
 
 
-model(S) ->
+models(S) ->
     {{ok, S}, S}.
 
 
@@ -316,7 +316,7 @@ init_model({extension, Scheme}, Opts) ->
 
 init_user_mixins(Ext, _Opts) ->
     %% TODO
-    {ok, [], Ext}.
+    {ok, [], [Ext]}.
 
 
 missing_tables(Tables) ->
