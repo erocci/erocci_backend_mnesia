@@ -46,12 +46,12 @@
 -record(?COLLECTION, {category, location, usermixin}).
 -record(?LINKS, {link, type, endpoint}).
 
--define(TABLES, [{?REC, [{disc_copies, [node()]},
+-define(TABLES, [{?REC, [{disc_copies, nodes()},
 			 {attributes, record_info(fields, ?REC)}]},
-		 {?COLLECTION, [{disc_copies, [node()]},
+		 {?COLLECTION, [{disc_copies, nodes()},
 				{attributes, record_info(fields, ?COLLECTION)},
 				{type, bag}]},
-		 {?LINKS, [{disc_copies, [node()]},
+		 {?LINKS, [{disc_copies, nodes()},
 			   {attributes, record_info(fields, ?LINKS)},
 			   {type, bag}]}]).
 
