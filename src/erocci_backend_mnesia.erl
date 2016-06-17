@@ -28,9 +28,9 @@
 	 create/5,
 	 update/3,
 	 link/4,
-	 action/3,
+	 action/4,
 	 delete/2,
-	 mixin/3,
+	 mixin/4,
 	 unmixin/3,
 	 collection/5]).
 
@@ -148,12 +148,11 @@ create(Entity, Owner, Group, S) ->
 		end, S).
 
 
-update(Actual, Attributes, S) ->
-    ?info("[~s] update(~s)", [?MODULE, occi_entity:location(Actual)]),
+update(Location, Attributes, S) ->
+    ?info("[~s] update(~s)", [?MODULE, Location]),
     Update = fun () ->
-		     Location = occi_entity:location(Actual),
 		     [Node] = mnesia:wread({?REC, Location}),
-		     Entity = occi_entity:update(Attributes, client, Actual),
+		     Entity = occi_entity:update(Attributes, client, Node#?REC.entity),
 		     Node1 = Node#?REC{ entity=Entity,
 					serial=incr(Node#?REC.serial) },
 		     ok = mnesia:write(Node1),
@@ -162,20 +161,20 @@ update(Actual, Attributes, S) ->
     transaction(Update, S).
 
 
-link(Resource, Type, LinkId, S) ->
-    ?info("[~s] link(~s, ~s, ~s)", [?MODULE, occi_resource:location(Resource), Type, LinkId]),
+link(Location, Type, LinkId, S) ->
+    ?info("[~s] link(~s, ~s, ~s)", [?MODULE, Location, Type, LinkId]),
     Link = fun () ->
-		   Rec = #?LINKS{ link=LinkId, type=Type, endpoint=occi_resource:location(Resource) },
-		   ok = mnesia:write(Rec),
-		   {ok, Resource, undefined}
+		   Rec = #?LINKS{ link=LinkId, type=Type, endpoint=Location },
+		   mnesia:write(Rec)
 	     end,
     transaction(Link, S).
 
 
-action(_Invoke, Entity, S) ->
-    ?info("[~s] invoke(~s)", [?MODULE, occi_entity:location(Entity)]),
+action(Location, _ActionId, _Attributes, S) ->
+    ?info("[~s] invoke(~s, ~p)", [?MODULE, Location, _ActionId]),
     %% Storage only, not supported
-    {{ok, Entity, undefined}, S}.
+    [Node] = mnesia:activity(transaction, fun () -> mnesia:read(?REC, Location) end),
+    {{ok, Node#?REC.entity, Node#?REC.serial}, S}.
 
 
 delete(Location, S) ->
@@ -186,35 +185,32 @@ delete(Location, S) ->
     transaction(Delete, S).
 
 
-mixin(Mixin, Actual, S) ->
-    ?info("[~s] mixin(~s)", [?MODULE, occi_entity:location(Actual)]),
+mixin(Location, Mixin, _Attributes, S) ->
+    ?info("[~s] mixin(~s, ~p)", [?MODULE, Location, occi_mixin:id(Mixin)]),
     AddMixin = fun () ->
-		       Location = occi_entity:location(Actual),
 		       [Node] = mnesia:wread({?REC, Location}),
-		       Entity = occi_entity:add_mixin(Mixin, Actual),
-		       Node1 = Node#?REC{ entity=Entity,
+		       Node1 = Node#?REC{ entity=occi_entity:add_mixin(Mixin, Node#?REC.entity),
 					  serial=incr(Node#?REC.serial) },
 		       ok = mnesia:write(Node1),
 		       ok = mnesia:write({?COLLECTION, occi_mixin:id(Mixin), Location, occi_mixin:tag(Mixin)}),
-		       {ok, Entity, Node1#?REC.serial}
+		       {ok, Node1#?REC.entity, Node1#?REC.serial}
 	       end,
     transaction(AddMixin, S).
 
 
-unmixin(Mixin, Actual, S) ->
-    ?info("[~s] unmixin(~s)", [?MODULE, occi_entity:location(Actual)]),
+unmixin(Location, Mixin, S) ->
+    ?info("[~s] unmixin(~s, ~p)", [?MODULE, Location, occi_mixin:id(Mixin)]),
     Unmixin = fun () ->
-		      Location = occi_entity:location(Actual),
 		      [Node] = mnesia:wread({?REC, Location}),
-		      Entity = occi_entity:rm_mixin(Mixin, Actual),
-		      Node1 = Node#?REC{ entity=Entity,
+		      Node1 = Node#?REC{ entity=occi_entity:rm_mixin(Mixin, Node#?REC.entity),
 					 serial=incr(Node#?REC.serial) },
 		      ok = mnesia:write(Node1),
-		      Objs = mnesia:match_object(#?COLLECTION{ category=occi_mixin:id(Mixin), location=Location, _='_' }),
+		      Objs = mnesia:match_object(#?COLLECTION{ category=occi_mixin:id(Mixin), 
+							       location=Location, _='_' }),
 		      lists:foreach(fun (X) ->
 					  mnesia:delete_object(X)
 				    end, Objs),
-		      {ok, Entity, Node1#?REC.serial}
+		      {ok, Node#?REC.entity, Node1#?REC.serial}
 	    end,
     transaction(Unmixin, S).
 
