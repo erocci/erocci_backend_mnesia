@@ -136,7 +136,7 @@ create(Entity, Owner, Group, S) ->
 		  undefined ->
 		      occi_entity:id(uuid:uuid_to_string(uuid:get_v4(), binary_standard), Entity);
 		  V -> 
-		      oci_entity:id(V, Entity)
+		      occi_entity:id(V, Entity)
 	      end,
     Location = occi_entity:id(Entity1),
     Entity2 = occi_entity:location(Location, Entity1),
@@ -180,6 +180,23 @@ action(Location, _ActionId, _Attributes, S) ->
 delete(Location, S) ->
     ?info("[~s] delete(~s)", [?MODULE, Location]),
     Delete = fun () ->
+		     [Node] = mnesia:wread({?REC, Location}),
+		     Kind = occi_entity:kind(Node#?REC.entity),
+		     Mixins = occi_entity:mixins(Node#?REC.entity),
+		     ok = lists:foreach(fun (CategoryId) ->
+						Match1 = #?COLLECTION{ category=CategoryId, location=Location, _='_' },
+						[Obj1] = mnesia:match_object(Match1),
+						mnesia:delete_object(Obj1)
+					end, [ Kind | Mixins ]),
+		     LinkMatch = case occi_type:type(Node#?REC.entity) of
+				     resource ->
+					 #?LINKS{ endpoint=Location, _='_' };
+				     link ->
+					 #?LINKS{ link=Location, _='_' }
+				 end,
+		     ok = lists:foreach(fun (Obj) ->
+						mnesia:delete_object(Obj)
+					end, mnesia:match_object(LinkMatch)),
 		     mnesia:delete({?REC, Location})
 	     end,
     transaction(Delete, S).
