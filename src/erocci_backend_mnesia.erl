@@ -61,7 +61,7 @@
 %%% @todo Generalize to all components ?
 %%% @end
 mnesia_disc_copies(_) ->
-    [node()].
+    nodes().
 
 
 %%%===================================================================
