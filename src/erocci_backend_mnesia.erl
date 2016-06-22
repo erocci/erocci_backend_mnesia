@@ -46,12 +46,12 @@
 -record(?COLLECTION, {category, location, usermixin}).
 -record(?LINKS, {link, type, endpoint}).
 
--define(TABLES, [{?REC, [{disc_copies, nodes()},
+-define(TABLES, [{?REC, [{disc_copies, [node() | nodes()]},
 			 {attributes, record_info(fields, ?REC)}]},
-		 {?COLLECTION, [{disc_copies, nodes()},
+		 {?COLLECTION, [{disc_copies, [node() | nodes()]},
 				{attributes, record_info(fields, ?COLLECTION)},
 				{type, bag}]},
-		 {?LINKS, [{disc_copies, nodes()},
+		 {?LINKS, [{disc_copies, [node() | nodes()]},
 			   {attributes, record_info(fields, ?LINKS)},
 			   {type, bag}]}]).
 
@@ -61,7 +61,7 @@
 %%% @todo Generalize to all components ?
 %%% @end
 mnesia_disc_copies(_) ->
-    nodes().
+    [node() | nodes()].
 
 
 %%%===================================================================
@@ -260,6 +260,7 @@ collection(Id, _Filter, Start, Number, S) ->
 %%%===================================================================
 get_links(Resource, Owner, Group, Serial) ->
     Match = #?LINKS{ endpoint=occi_resource:location(Resource), _='_' },
+    ?debug("MATCH=~p", [Match]),
     Links = lists:map(fun (#?LINKS{ link=Location }) ->
 			      Location
 		      end, mnesia:match_object(Match)),
