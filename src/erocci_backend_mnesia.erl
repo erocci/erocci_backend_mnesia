@@ -46,14 +46,12 @@
 -record(?COLLECTION, {category, location, usermixin}).
 -record(?LINKS, {link, type, endpoint}).
 
--define(TABLES, [{?REC, [{disc_copies, [node() | nodes()]},
-			 {attributes, record_info(fields, ?REC)}]},
-		 {?COLLECTION, [{disc_copies, [node() | nodes()]},
-				{attributes, record_info(fields, ?COLLECTION)},
-				{type, bag}]},
-		 {?LINKS, [{disc_copies, [node() | nodes()]},
-			   {attributes, record_info(fields, ?LINKS)},
-			   {type, bag}]}]).
+-define(TABLES(Copies), [{?REC, Copies ++ [ {attributes, record_info(fields, ?REC)} ]},
+			{?COLLECTION, Copies ++ [ {attributes, record_info(fields, ?COLLECTION)},
+						 {type, bag} ]},
+			{?LINKS, Copies ++ [ {attributes, record_info(fields, ?LINKS)},
+					    {type, bag} ]}]
+       ).
 
 -type state() :: [occi_extension:t()].
 
@@ -61,7 +59,15 @@
 %%% @todo Generalize to all components ?
 %%% @end
 mnesia_disc_copies(_) ->
-    [node() | nodes()].
+    application:load(erocci_backend_mnesia),
+    Copies = lists:foldl(fun validate_copies/2, [], application:get_env(erocci_backend_mnesia, copies, [])),
+    lists:foldl(fun ({disc_copies, Nodelist}, Acc) ->
+			Nodelist ++ Acc;
+		    ({disc_only_copies, Nodelist}, Acc) ->
+			Nodelist ++ Acc;
+		    (_, Acc) ->
+			Acc
+		end, [], Copies).
 
 
 %%%===================================================================
@@ -70,7 +76,8 @@ mnesia_disc_copies(_) ->
 -spec init([]) -> {ok, erocci_backend:capability(), state()} | {error, term()}.
 init(Opts) ->
     {ok, _} = application:ensure_all_started(erocci_backend_mnesia),
-    case init_schema(missing_tables(?TABLES)) of
+    Copies = lists:foldl(fun validate_copies/2, [], application:get_env(erocci_backend_mnesia, copies, [])),
+    case init_schema(missing_tables(?TABLES(Copies))) of
 	ok ->
 	    init_model(proplists:get_value(schema, Opts, []), Opts);
 	{error, schema} ->
@@ -117,13 +124,18 @@ create(Location, Entity, Owner, Group, S) ->
 			      [] ->
 				  {?REC, Location, Entity, Owner, Group, integer_to_binary(1)};
 			      [{?REC, _, _, Owner, _, Serial}] ->
-				  {?REC, Location, Entity, Owner, Group, incr(Serial)};
+				  case delete_links(occi_type:type(Entity), Location) of
+				      ok ->
+					  {?REC, Location, Entity, Owner, Group, incr(Serial)};
+				      {error, _}=Err ->
+					  Err
+				  end;
 			      [{?REC, _, _, _OtherOwner, _, _}] ->
 				  {error, conflict}
 			  end,
 		   case gen_create(Node) of
-		       {error, _}=Err ->
-			   Err;
+		       {error, _}=Err2 ->
+			   Err2;
 		       ok ->
 			   {ok, Node#?REC.entity, Node#?REC.serial}
 		   end
@@ -188,15 +200,7 @@ delete(Location, S) ->
 						[Obj1] = mnesia:match_object(Match1),
 						mnesia:delete_object(Obj1)
 					end, [ Kind | Mixins ]),
-		     LinkMatch = case occi_type:type(Node#?REC.entity) of
-				     resource ->
-					 #?LINKS{ endpoint=Location, _='_' };
-				     link ->
-					 #?LINKS{ link=Location, _='_' }
-				 end,
-		     ok = lists:foreach(fun (Obj) ->
-						mnesia:delete_object(Obj)
-					end, mnesia:match_object(LinkMatch)),
+		     ok = delete_links(occi_type:type(Node#?REC.entity), Location),
 		     mnesia:delete({?REC, Location})
 	     end,
     transaction(Delete, S).
@@ -267,6 +271,18 @@ get_links(Resource, Owner, Group, Serial) ->
     {ok, occi_resource:links(Links, Resource), Owner, Group, Serial}.    
 
 
+delete_links(Type, Location) ->
+    LinkMatch = case Type of
+		    resource ->
+			#?LINKS{ endpoint=Location, _='_' };
+		    link ->
+			#?LINKS{ link=Location, _='_' }
+		end,
+    lists:foreach(fun (Obj) ->
+			  mnesia:delete_object(Obj)
+		  end, mnesia:match_object(LinkMatch)).
+
+
 gen_create({error, _}=Err) ->
     Err;
 
@@ -329,8 +345,15 @@ init_model({extension, Scheme}, Opts) ->
 
 
 init_user_mixins(Ext, _Opts) ->
-    %% TODO
-    {ok, [], [Ext]}.
+    QH = qlc:q([ Id || {_, Id, _, Tag} <- mnesia:table(?COLLECTION), Tag =:= true ], {unique, true}),
+    MixinIds = mnesia:activity(transaction, fun () -> qlc:eval(QH) end),
+    ?debug("user mixins: ~p", [MixinIds]),
+    Ext2 = lists:foldl(fun ({Scheme, Term}, Acc) ->
+			       ?debug("add mixin ~p", [{Scheme, Term}]),
+			       Mixin = occi_mixin:new(Scheme, Term),
+			       occi_extension:add_category(Mixin, Acc)
+		       end, Ext, MixinIds),
+    {ok, [], [Ext2]}.
 
 
 missing_tables(Tables) ->
@@ -365,3 +388,18 @@ transaction(Fun, S) ->
     catch exit:Reason ->
 	    {{error, Reason}, S}
     end.
+
+
+validate_copies({Opt, Value}, Acc) when disc_copies =:= Opt
+					orelse disc_only_copies =:= Opt
+					orelse ram_copies =:= Opt ->
+    Nodelist = case Value of
+		   local -> [node()];
+		   remote -> nodes();
+		   all -> [ node() | nodes() ];
+		   List -> List
+	       end,
+    [ {Opt, Nodelist} | Acc ];
+
+validate_copies(_, Acc) ->
+    Acc.

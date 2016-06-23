@@ -13,6 +13,7 @@
    ]},
   {registered, []},
   {env, [
-	 {schema, {extension, "http://schemas.ogf.org/occi/core#"}}
+	 {schema, {extension, "http://schemas.ogf.org/occi/core#"}},
+	 {copies, [{disc_copies, local}]}
 	]}
  ]}.
