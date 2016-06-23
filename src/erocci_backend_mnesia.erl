@@ -347,7 +347,6 @@ init_model({extension, Scheme}, Opts) ->
 init_user_mixins(Ext, _Opts) ->
     QH = qlc:q([ Id || {_, Id, _, Tag} <- mnesia:table(?COLLECTION), Tag =:= true ], {unique, true}),
     MixinIds = mnesia:activity(transaction, fun () -> qlc:eval(QH) end),
-    ?debug("user mixins: ~p", [MixinIds]),
     Ext2 = lists:foldl(fun ({Scheme, Term}, Acc) ->
 			       ?debug("add mixin ~p", [{Scheme, Term}]),
 			       Mixin = occi_mixin:new(Scheme, Term),
