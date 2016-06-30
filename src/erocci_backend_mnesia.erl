@@ -251,7 +251,7 @@ collection(Id, _Filter, Start, Number, S) ->
 					Node#?REC.location =:= Coll#?COLLECTION.location ]),
 			 QC = qlc:cursor(QH),
 			 case Start of
-			     0 -> ok;
+			     1 -> ok;
 			     _ -> _Trash = qlc:next_answers(QC, Start-1)
 			 end,
 			 {ok, qlc:next_answers(QC, Number), undefined}
