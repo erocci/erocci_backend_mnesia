@@ -244,7 +244,7 @@ collection(Id, _Filter, Start, undefined, S) ->
 collection(Id, _Filter, Start, Number, S) ->
     ?info("[~s] collection(~p, ~b, ~p)", [?MODULE, Id, Start, Number]),
     Collection = fun () ->
-			 QH = qlc:q([ { Node#?REC.entity, Node#?REC.owner, Node#?REC.group } ||
+			 QH = qlc:q([ Node#?REC.location ||
 					Node <- mnesia:table(?REC),
 					Coll <- mnesia:table(?COLLECTION),
 					Coll#?COLLECTION.category =:= Id,
