@@ -144,14 +144,13 @@ create(Location, Entity, Owner, Group, S) ->
 
 
 create(Entity, Owner, Group, S) ->
-    Entity1 = case occi_entity:get(<<"occi.core.id">>, Entity) of
-		  undefined ->
-		      occi_entity:id(uuid:uuid_to_string(uuid:get_v4(), binary_standard), Entity);
-		  V -> 
-		      occi_entity:id(V, Entity)
+    Location = case occi_entity:get(<<"occi.core.id">>, Entity) of
+		   undefined ->
+		       uuid:uuid_to_string(uuid:get_v4(), binary_standard);
+		   V -> 
+		       V
 	      end,
-    Location = occi_entity:id(Entity1),
-    Entity2 = occi_entity:location(Location, Entity1),
+    Entity2 = occi_entity:location(Location, Entity),
     ?info("[~s] create(~s)", [?MODULE, Location]),
     Node = {?REC, Location, Entity2, Owner, Group, integer_to_binary(1)},
     transaction(fun () -> 
