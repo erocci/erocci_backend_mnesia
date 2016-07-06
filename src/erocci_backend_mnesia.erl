@@ -263,7 +263,6 @@ collection(Id, _Filter, Start, Number, S) ->
 %%%===================================================================
 get_links(Resource, Owner, Group, Serial) ->
     Match = #?LINKS{ endpoint=occi_resource:location(Resource), _='_' },
-    ?debug("MATCH=~p", [Match]),
     Links = lists:map(fun (#?LINKS{ link=Location }) ->
 			      Location
 		      end, mnesia:match_object(Match)),
