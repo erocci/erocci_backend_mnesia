@@ -28,6 +28,7 @@
          create/5,
          update/3,
          link/4,
+         unlink/4,
          action/4,
          delete/2,
          mixin/4,
@@ -181,6 +182,15 @@ link(Location, Type, LinkId, S) ->
   transaction(Link, S).
 
 
+unlink(Location, Type, LinkId, S) ->
+  ?info("[~s] unlink(~s, ~s, ~s)", [?MODULE, Location, Type, LinkId]),
+  Unlink = fun () ->
+               Obj = #?LINKS{ endpoint=Location, type=Type, link=LinkId },
+               mnesia:delete(Obj)
+           end,
+  transaction(Unlink, S).
+
+
 action(Location, _ActionId, _Attributes, S) ->
   ?info("[~s] invoke(~s, ~p)", [?MODULE, Location, _ActionId]),
   %% Storage only, not supported
@@ -199,7 +209,6 @@ delete(Location, S) ->
                                       [Obj1] = mnesia:match_object(Match1),
                                       mnesia:delete_object(Obj1)
                                   end, [ Kind | Mixins ]),
-               ok = delete_links(occi_type:type(Node#?REC.entity), Location),
                mnesia:delete({?REC, Location})
            end,
   transaction(Delete, S).
